@@ -26,12 +26,10 @@ RUN ARCH=$(uname -m) && \
     if [ "$ARCH" = "x86_64" ]; then ARCH="x86_64"; \
     elif [ "$ARCH" = "aarch64" ]; then ARCH="aarch64"; \
     else ARCH="x86_64"; fi && \
-    curl -L "https://github.com/rapiz1/rathole/releases/latest/download/rathole-${ARCH}-unknown-linux-musl.tar.gz" -o /tmp/rathole.tar.gz -f && \
-    if [ ! -f /tmp/rathole.tar.gz ] || [ ! -s /tmp/rathole.tar.gz ]; then \
-        echo "Failed to download rathole, trying alternative method..."; \
-        RATHOLE_VERSION=$(curl -s https://api.github.com/repos/rapiz1/rathole/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/') && \
-        curl -L "https://github.com/rapiz1/rathole/releases/download/${RATHOLE_VERSION}/rathole-${ARCH}-unknown-linux-musl.tar.gz" -o /tmp/rathole.tar.gz -f; \
-    fi && \
+    RATHOLE_VERSION=$(curl -s https://api.github.com/repos/rapiz1/rathole/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/') && \
+    echo "Downloading rathole ${RATHOLE_VERSION} for ${ARCH}..." && \
+    curl -L "https://github.com/rapiz1/rathole/releases/download/${RATHOLE_VERSION}/rathole-${ARCH}-unknown-linux-musl.tar.gz" -o /tmp/rathole.tar.gz -f && \
+    file /tmp/rathole.tar.gz | grep -q "gzip" && \
     tar -xzf /tmp/rathole.tar.gz -C /tmp && \
     mv /tmp/rathole-*/rathole /usr/local/bin/ && \
     chmod +x /usr/local/bin/rathole && \
