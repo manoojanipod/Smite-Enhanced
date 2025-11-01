@@ -16,6 +16,12 @@ fi
 OS="$(uname -s)"
 ARCH="$(uname -m)"
 
+# Install git if not present
+if ! command -v git &> /dev/null; then
+    echo "Git not found. Installing git..."
+    apt-get update && apt-get install -y git
+fi
+
 # Install Docker if not present
 if ! command -v docker &> /dev/null; then
     echo "Docker not found. Installing Docker..."
