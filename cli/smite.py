@@ -76,41 +76,73 @@ def cmd_admin_create(args):
     
     # First try: Use Docker exec (works on fresh installs)
     try:
-        result = subprocess.run(
-            ["docker", "ps", "--filter", "name=smite-panel", "--format", "{{.Names}}"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            container_name = result.stdout.strip()
+        # Wait for container to be running (not restarting)
+        max_wait = 30
+        waited = 0
+        container_name = None
+        
+        while waited < max_wait:
+            result = subprocess.run(
+                ["docker", "ps", "--filter", "name=smite-panel", "--format", "{{.Names}}"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                container_name = result.stdout.strip()
+                # Check if container is actually running (not restarting)
+                status_result = subprocess.run(
+                    ["docker", "ps", "--filter", f"name={container_name}", "--format", "{{.Status}}"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                if "Up" in status_result.stdout and "Restarting" not in status_result.stdout:
+                    break
+            import time
+            time.sleep(2)
+            waited += 2
+        
+        if container_name and waited < max_wait:
             print(f"Creating admin via Docker container ({container_name})...")
             
+            # Use base64 to safely pass password through command line
+            import base64
+            import json
+            
             # Create Python script to run inside container
+            # Use JSON to safely pass the password
+            password_json = json.dumps(password)
+            username_json = json.dumps(username)
+            
             script = f"""
 import asyncio
 import sys
+import json
 from app.database import AsyncSessionLocal, init_db
 from app.models import Admin
 from sqlalchemy import select
 from passlib.context import CryptContext
+
+username = json.loads({username_json})
+password = json.loads({password_json})
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 async def create():
     await init_db()
     async with AsyncSessionLocal() as session:
-        result = await session.execute(select(Admin).where(Admin.username == "{username}"))
+        result = await session.execute(select(Admin).where(Admin.username == username))
         existing = result.scalar_one_or_none()
         if existing:
-            print(f"Error: Admin user '{username}' already exists", file=sys.stderr)
+            print(f"Error: Admin user '{{username}}' already exists", file=sys.stderr)
             sys.exit(1)
         
-        password_hash = pwd_context.hash("{password}")
-        admin = Admin(username="{username}", password_hash=password_hash)
+        password_hash = pwd_context.hash(password)
+        admin = Admin(username=username, password_hash=password_hash)
         session.add(admin)
         await session.commit()
-        print(f"Admin user '{username}' created successfully!")
+        print(f"Admin user '{{username}}' created successfully!")
 
 asyncio.run(create())
 """
@@ -126,22 +158,56 @@ asyncio.run(create())
                 print(proc.stdout)
                 return
             else:
-                error_msg = proc.stderr.strip()
+                error_msg = proc.stderr.strip() or proc.stdout.strip()
                 if "already exists" in error_msg:
                     print(error_msg)
                     sys.exit(1)
                 print(f"Warning: Docker exec failed: {error_msg}")
-                print("Trying local method...")
+                print("Checking container logs...")
+                # Show last few lines of logs
+                log_proc = subprocess.run(
+                    ["docker", "logs", "--tail", "10", container_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                if log_proc.returncode == 0:
+                    print("\nContainer logs:")
+                    print(log_proc.stdout)
+                print("\nTrying local method...")
+        else:
+            print("Warning: Container not running or still restarting. Checking container status...")
+            status_proc = subprocess.run(
+                ["docker", "ps", "-a", "--filter", "name=smite-panel", "--format", "table {{.Names}}\\t{{.Status}}"],
+                capture_output=True,
+                text=True
+            )
+            if status_proc.returncode == 0:
+                print(status_proc.stdout)
+            print("\nTrying local method...")
     except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.SubprocessError) as e:
-        print(f"Warning: Docker not available or container not running: {e}")
+        print(f"Warning: Docker error: {e}")
         print("Trying local method...")
     
     # Second try: Use local dependencies
     try:
-        project_root = Path(__file__).parent.parent
-        panel_path = project_root / "panel"
-        if not panel_path.exists():
+        # Try multiple possible locations
+        possible_roots = [
+            Path(__file__).parent.parent,  # cli/../ = project root
+            Path("/opt/smite"),  # Standard install location
+            Path.cwd(),  # Current directory
+        ]
+        
+        panel_path = None
+        for root in possible_roots:
+            test_path = root / "panel"
+            if test_path.exists() and (test_path / "main.py").exists():
+                panel_path = test_path
+                break
+        
+        if not panel_path:
             print("Error: Panel directory not found")
+            print(f"Searched in: {[str(p / 'panel') for p in possible_roots]}")
             sys.exit(1)
         
         sys.path.insert(0, str(panel_path))
