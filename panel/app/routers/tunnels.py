@@ -101,8 +101,9 @@ async def create_tunnel(tunnel: TunnelCreate, request: Request, db: AsyncSession
             # Start port forwarding on panel (only for TCP-based tunnels)
             # TCP-based: tcp, ws (WebSocket), grpc
             # UDP-based or special: udp, wireguard (need UDP forwarding, not implemented yet)
-            # Rathole: reverse tunnel, doesn't need panel forwarding
+            # Rathole: reverse tunnel, needs Rathole server on panel
             needs_tcp_forwarding = db_tunnel.type in ["tcp", "ws", "grpc"] and db_tunnel.core == "xray"
+            needs_rathole_server = db_tunnel.core == "rathole"
             
             if needs_tcp_forwarding:
                 remote_port = db_tunnel.spec.get("remote_port") or db_tunnel.spec.get("listen_port")
@@ -119,6 +120,30 @@ async def create_tunnel(tunnel: TunnelCreate, request: Request, db: AsyncSession
                             # Log but don't fail tunnel creation
                             import logging
                             logging.error(f"Failed to start port forwarding: {e}")
+            
+            elif needs_rathole_server:
+                # Start Rathole server on panel
+                remote_addr = db_tunnel.spec.get("remote_addr")
+                token = db_tunnel.spec.get("token")
+                proxy_port = db_tunnel.spec.get("remote_port") or db_tunnel.spec.get("listen_port")
+                
+                if remote_addr and token and proxy_port and hasattr(request.app.state, 'rathole_server_manager'):
+                    try:
+                        success = request.app.state.rathole_server_manager.start_server(
+                            tunnel_id=db_tunnel.id,
+                            remote_addr=remote_addr,
+                            token=token,
+                            proxy_port=int(proxy_port)
+                        )
+                        if not success:
+                            import logging
+                            logging.error(f"Failed to start Rathole server for tunnel {db_tunnel.id}")
+                            db_tunnel.status = "error"
+                    except Exception as e:
+                        # Log but don't fail tunnel creation
+                        import logging
+                        logging.error(f"Failed to start Rathole server: {e}")
+                        db_tunnel.status = "error"
         else:
             db_tunnel.status = "error"
         await db.commit()
@@ -240,6 +265,8 @@ async def delete_tunnel(tunnel_id: str, request: Request, db: AsyncSession = Dep
     
     # Stop port forwarding on panel (only for TCP-based tunnels)
     needs_tcp_forwarding = tunnel.type in ["tcp", "ws", "grpc"] and tunnel.core == "xray"
+    needs_rathole_server = tunnel.core == "rathole"
+    
     if needs_tcp_forwarding:
         remote_port = tunnel.spec.get("remote_port") or tunnel.spec.get("listen_port")
         if remote_port and hasattr(request.app.state, 'port_forwarder'):
@@ -248,6 +275,15 @@ async def delete_tunnel(tunnel_id: str, request: Request, db: AsyncSession = Dep
             except Exception as e:
                 import logging
                 logging.error(f"Failed to stop port forwarding: {e}")
+    
+    elif needs_rathole_server:
+        # Stop Rathole server on panel
+        if hasattr(request.app.state, 'rathole_server_manager'):
+            try:
+                request.app.state.rathole_server_manager.stop_server(tunnel.id)
+            except Exception as e:
+                import logging
+                logging.error(f"Failed to stop Rathole server: {e}")
     
     # Remove from node if active
     if tunnel.status == "active":
@@ -300,13 +336,23 @@ async def update_tunnel(tunnel_id: str, tunnel: TunnelUpdate, request: Request, 
         if node:
             client = Hysteria2Client()
             try:
-                # Stop old port forwarding
-                old_remote_port = db_tunnel.spec.get("remote_port") or db_tunnel.spec.get("listen_port")
-                if old_remote_port and hasattr(request.app.state, 'port_forwarder'):
-                    try:
-                        await port_forwarder.stop_forward(int(old_remote_port))
-                    except:
-                        pass
+                # Stop old port forwarding or Rathole server
+                old_needs_tcp_forwarding = db_tunnel.type in ["tcp", "ws", "grpc"] and db_tunnel.core == "xray"
+                old_needs_rathole_server = db_tunnel.core == "rathole"
+                
+                if old_needs_tcp_forwarding:
+                    old_remote_port = db_tunnel.spec.get("remote_port") or db_tunnel.spec.get("listen_port")
+                    if old_remote_port and hasattr(request.app.state, 'port_forwarder'):
+                        try:
+                            await port_forwarder.stop_forward(int(old_remote_port))
+                        except:
+                            pass
+                elif old_needs_rathole_server:
+                    if hasattr(request.app.state, 'rathole_server_manager'):
+                        try:
+                            request.app.state.rathole_server_manager.stop_server(db_tunnel.id)
+                        except:
+                            pass
                 
                 # Apply new tunnel config
                 response = await client.send_to_node(
@@ -322,8 +368,10 @@ async def update_tunnel(tunnel_id: str, tunnel: TunnelUpdate, request: Request, 
                 
                 if response.get("status") == "success":
                     db_tunnel.status = "active"
-                    # Start new port forwarding if needed
+                    # Start new port forwarding or Rathole server if needed
                     needs_tcp_forwarding = db_tunnel.type in ["tcp", "ws", "grpc"] and db_tunnel.core == "xray"
+                    needs_rathole_server = db_tunnel.core == "rathole"
+                    
                     if needs_tcp_forwarding:
                         remote_port = db_tunnel.spec.get("remote_port") or db_tunnel.spec.get("listen_port")
                         if remote_port and hasattr(request.app.state, 'port_forwarder'):
@@ -338,6 +386,26 @@ async def update_tunnel(tunnel_id: str, tunnel: TunnelUpdate, request: Request, 
                                 except Exception as e:
                                     import logging
                                     logging.error(f"Failed to start port forwarding: {e}")
+                    
+                    elif needs_rathole_server:
+                        remote_addr = db_tunnel.spec.get("remote_addr")
+                        token = db_tunnel.spec.get("token")
+                        proxy_port = db_tunnel.spec.get("remote_port") or db_tunnel.spec.get("listen_port")
+                        
+                        if remote_addr and token and proxy_port and hasattr(request.app.state, 'rathole_server_manager'):
+                            try:
+                                success = request.app.state.rathole_server_manager.start_server(
+                                    tunnel_id=db_tunnel.id,
+                                    remote_addr=remote_addr,
+                                    token=token,
+                                    proxy_port=int(proxy_port)
+                                )
+                                if not success:
+                                    db_tunnel.status = "error"
+                            except Exception as e:
+                                import logging
+                                logging.error(f"Failed to start Rathole server: {e}")
+                                db_tunnel.status = "error"
                 else:
                     db_tunnel.status = "error"
             except Exception as e:

@@ -19,6 +19,7 @@ from app.database import init_db
 from app.routers import nodes, tunnels, panel, usage, status, logs
 from app.hysteria2_server import Hysteria2Server
 from app.port_forwarder import port_forwarder
+from app.rathole_server import rathole_server_manager
 import logging
 
 logger = logging.getLogger(__name__)
@@ -38,8 +39,14 @@ async def lifespan(app: FastAPI):
     # Initialize port forwarder
     app.state.port_forwarder = port_forwarder
     
+    # Initialize Rathole server manager
+    app.state.rathole_server_manager = rathole_server_manager
+    
     # Restore active tunnels' port forwarding on startup
     await _restore_port_forwards()
+    
+    # Restore active Rathole servers on startup
+    await _restore_rathole_servers()
     
     yield
     
@@ -49,6 +56,9 @@ async def lifespan(app: FastAPI):
     
     # Stop all port forwarding
     await port_forwarder.cleanup_all()
+    
+    # Stop all Rathole servers
+    rathole_server_manager.cleanup_all()
 
 
 async def _restore_port_forwards():
@@ -87,6 +97,36 @@ async def _restore_port_forwards():
                 )
     except Exception as e:
         logger.error(f"Error restoring port forwards: {e}")
+
+
+async def _restore_rathole_servers():
+    """Restore Rathole servers for active tunnels on startup"""
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(Tunnel).where(Tunnel.status == "active"))
+            tunnels = result.scalars().all()
+            
+            for tunnel in tunnels:
+                # Only restore Rathole tunnels
+                if tunnel.core != "rathole":
+                    continue
+                
+                remote_addr = tunnel.spec.get("remote_addr")
+                token = tunnel.spec.get("token")
+                proxy_port = tunnel.spec.get("remote_port") or tunnel.spec.get("listen_port")
+                
+                if not remote_addr or not token or not proxy_port:
+                    continue
+                
+                # Start Rathole server
+                rathole_server_manager.start_server(
+                    tunnel_id=tunnel.id,
+                    remote_addr=remote_addr,
+                    token=token,
+                    proxy_port=int(proxy_port)
+                )
+    except Exception as e:
+        logger.error(f"Error restoring Rathole servers: {e}")
 
 
 app = FastAPI(

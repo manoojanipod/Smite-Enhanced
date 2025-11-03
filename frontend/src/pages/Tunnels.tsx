@@ -372,6 +372,7 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
         spec.remote_addr = formData.rathole_remote_addr
         spec.token = formData.rathole_token
         spec.local_addr = formData.rathole_local_addr
+        spec.remote_port = parseInt(formData.remote_port.toString()) || 10000  // Proxy port for clients
       }
       
       const payload = {
@@ -536,7 +537,11 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
                 max="65535"
                 required
               />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Port on node to listen for connections</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {formData.core === 'rathole' 
+                  ? 'Port on panel for clients to connect (should match local service port)'
+                  : 'Port on node to listen for connections'}
+              </p>
             </div>
             {formData.core === 'xray' && (formData.type === 'tcp' || formData.type === 'ws' || formData.type === 'grpc') && (
               <div>
