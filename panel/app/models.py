@@ -35,6 +35,7 @@ class Tunnel(Base):
     used_mb = Column(Float, default=0)
     expires_at = Column(DateTime, nullable=True)
     status = Column(String, default="pending")  # pending, active, error, expired
+    error_message = Column(Text, nullable=True)  # Store error details
     revision = Column(Integer, default=1)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

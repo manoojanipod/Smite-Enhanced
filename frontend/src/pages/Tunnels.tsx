@@ -13,6 +13,7 @@ interface Tunnel {
   used_mb: number
   expires_at: string | null
   status: string
+  error_message?: string | null
   revision: number
   created_at: string
   updated_at: string
@@ -111,6 +112,12 @@ const Tunnels = () => {
               </div>
             </div>
 
+            {tunnel.status === 'error' && tunnel.error_message && (
+              <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <p className="text-xs font-medium text-red-800 dark:text-red-200 mb-1">Error</p>
+                <p className="text-sm text-red-700 dark:text-red-300">{tunnel.error_message}</p>
+              </div>
+            )}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-2">
               <div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Status</p>
@@ -598,7 +605,7 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
                   placeholder="panel.example.com:23333"
                   required
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Rathole server address</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Rathole server address (e.g., panel.example.com:23333 - NOT the panel API port 8000)</p>
               </div>
             )}
           </div>

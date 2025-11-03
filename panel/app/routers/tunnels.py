@@ -42,6 +42,7 @@ class TunnelResponse(BaseModel):
     used_mb: float
     expires_at: datetime | None
     status: str
+    error_message: str | None = None
     revision: int
     created_at: datetime
     updated_at: datetime
@@ -127,6 +128,20 @@ async def create_tunnel(tunnel: TunnelCreate, request: Request, db: AsyncSession
                 token = db_tunnel.spec.get("token")
                 proxy_port = db_tunnel.spec.get("remote_port") or db_tunnel.spec.get("listen_port")
                 
+                # Validate remote_addr format
+                if remote_addr and ":" in remote_addr:
+                    rathole_port = remote_addr.split(":")[1]
+                    # Check if using panel API port (8000) - this will conflict
+                    try:
+                        if int(rathole_port) == 8000:
+                            db_tunnel.status = "error"
+                            db_tunnel.error_message = "Rathole server cannot use port 8000 (panel API port). Use a different port like 23333."
+                            await db.commit()
+                            await db.refresh(db_tunnel)
+                            return db_tunnel
+                    except ValueError:
+                        pass
+                
                 if remote_addr and token and proxy_port and hasattr(request.app.state, 'rathole_server_manager'):
                     try:
                         success = request.app.state.rathole_server_manager.start_server(
@@ -139,18 +154,24 @@ async def create_tunnel(tunnel: TunnelCreate, request: Request, db: AsyncSession
                             import logging
                             logging.error(f"Failed to start Rathole server for tunnel {db_tunnel.id}")
                             db_tunnel.status = "error"
+                            db_tunnel.error_message = "Failed to start Rathole server. Check logs for details."
                     except Exception as e:
                         # Log but don't fail tunnel creation
                         import logging
-                        logging.error(f"Failed to start Rathole server: {e}")
+                        error_msg = str(e)
+                        logging.error(f"Failed to start Rathole server: {error_msg}")
                         db_tunnel.status = "error"
+                        db_tunnel.error_message = f"Rathole server error: {error_msg}"
         else:
             db_tunnel.status = "error"
+            db_tunnel.error_message = "Failed to apply tunnel to node. Check node connection."
         await db.commit()
         await db.refresh(db_tunnel)
     except Exception as e:
         # Don't fail tunnel creation if apply fails, just mark as error
+        error_msg = str(e)
         db_tunnel.status = "error"
+        db_tunnel.error_message = f"Tunnel creation error: {error_msg}"
         await db.commit()
         await db.refresh(db_tunnel)
     
