@@ -38,6 +38,7 @@ class TCPAdapter:
         self.config_dir = Path("/etc/smite-node/xray")
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self.processes = {}  # Track running processes
+        self.usage_tracking = {}  # Track cumulative usage per tunnel
     
     def apply(self, tunnel_id: str, spec: Dict[str, Any]):
         """Apply TCP tunnel - forwards TCP connections using dokodemo-door"""
@@ -153,18 +154,30 @@ class TCPAdapter:
         }
     
     def get_usage_mb(self, tunnel_id: str) -> float:
-        """Get usage in MB"""
-        # Try to get stats from xray API or process
+        """Get usage in MB - tracks process I/O"""
         if tunnel_id in self.processes:
             proc = self.processes[tunnel_id]
             try:
-                # Get process I/O stats
                 proc_info = psutil.Process(proc.pid)
+                # Get process I/O stats
                 io_counters = proc_info.io_counters()
-                bytes_sent = io_counters.read_bytes + io_counters.write_bytes
-                return bytes_sent / (1024 * 1024)  # Convert to MB
-            except:
-                pass
+                # read_bytes + write_bytes includes disk I/O
+                # For network, we'd need xray stats API, but this gives us process activity
+                total_bytes = io_counters.read_bytes + io_counters.write_bytes
+                
+                # Track cumulative usage
+                if tunnel_id not in self.usage_tracking:
+                    self.usage_tracking[tunnel_id] = 0
+                
+                # Update if we have new data
+                if total_bytes > self.usage_tracking[tunnel_id]:
+                    self.usage_tracking[tunnel_id] = total_bytes
+                
+                return self.usage_tracking[tunnel_id] / (1024 * 1024)  # Convert to MB
+            except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError, OSError):
+                # Return last known usage if process is gone
+                if tunnel_id in self.usage_tracking:
+                    return self.usage_tracking[tunnel_id] / (1024 * 1024)
         return 0.0
 
 
@@ -211,13 +224,11 @@ class UDPAdapter(TCPAdapter):
             }
         else:
             # VLESS mKCP mode: Create a VLESS server with mKCP transport
-            mtu = spec.get("mtu", 1350)
-            tti = spec.get("tti", 50)
-            uplink_capacity = spec.get("uplink_capacity", 5)
-            downlink_capacity = spec.get("downlink_capacity", 20)
-            congestion = spec.get("congestion", False)
-            read_buffer_size = spec.get("read_buffer_size", 2)
-            write_buffer_size = spec.get("write_buffer_size", 2)
+            # Ensure UUID exists for VLESS
+            uuid = spec.get("uuid", "")
+            if not uuid:
+                import uuid as uuid_lib
+                uuid = str(uuid_lib.uuid4())
             
             config = {
                 "log": {"loglevel": "warning"},
@@ -225,19 +236,19 @@ class UDPAdapter(TCPAdapter):
                     "port": int(listen_port),
                     "protocol": "vless",
                     "settings": {
-                        "clients": [{"id": spec.get("uuid", "")}],
+                        "clients": [{"id": uuid}],
                         "decryption": "none"
                     },
                     "streamSettings": {
                         "network": "kcp",
                         "kcpSettings": {
-                            "mtu": mtu,
-                            "tti": tti,
-                            "uplinkCapacity": uplink_capacity,
-                            "downlinkCapacity": downlink_capacity,
-                            "congestion": congestion,
-                            "readBufferSize": read_buffer_size,
-                            "writeBufferSize": write_buffer_size,
+                            "mtu": spec.get("mtu", 1350),
+                            "tti": spec.get("tti", 50),
+                            "uplinkCapacity": spec.get("uplink_capacity", 5),
+                            "downlinkCapacity": spec.get("downlink_capacity", 20),
+                            "congestion": spec.get("congestion", False),
+                            "readBufferSize": spec.get("read_buffer_size", 2),
+                            "writeBufferSize": spec.get("write_buffer_size", 2),
                             "header": {
                                 "type": spec.get("header_type", "none")
                             }
