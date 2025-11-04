@@ -6,7 +6,6 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Nodes from './pages/Nodes'
 import Tunnels from './pages/Tunnels'
-import Settings from './pages/Settings'
 import Logs from './pages/Logs'
 
 // Protected Route Component
@@ -83,16 +82,6 @@ const AppRoutes = () => {
           <ProtectedRoute>
             <Layout>
               <Tunnels />
-            </Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/settings"
-        element={
-          <ProtectedRoute>
-            <Layout>
-              <Settings />
             </Layout>
           </ProtectedRoute>
         }

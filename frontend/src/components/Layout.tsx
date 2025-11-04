@@ -1,6 +1,6 @@
 import { ReactNode, useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Network, Settings, FileText, Activity, Moon, Sun, Github, Menu, X, LogOut } from 'lucide-react'
+import { LayoutDashboard, Network, FileText, Activity, Moon, Sun, Github, Menu, X, LogOut } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import SmiteLogoDark from '../assets/SmiteD.png'
 import SmiteLogoLight from '../assets/SmiteL.png'
@@ -38,7 +38,6 @@ const Layout = ({ children }: LayoutProps) => {
     { path: '/nodes', label: 'Nodes', icon: Network },
     { path: '/tunnels', label: 'Tunnels', icon: Activity },
     { path: '/logs', label: 'Logs', icon: FileText },
-    { path: '/settings', label: 'Settings', icon: Settings },
   ]
 
   return (

@@ -108,28 +108,48 @@ async def create_tunnel(tunnel: TunnelCreate, request: Request, db: AsyncSession
         if response.get("status") == "success":
             db_tunnel.status = "active"
             
-            # Start port forwarding on panel (only for TCP-based tunnels)
-            # TCP-based: tcp, ws (WebSocket), grpc
-            # UDP-based or special: udp, wireguard (need UDP forwarding, not implemented yet)
+            # Start forwarding on panel using gost (for TCP/UDP/WS/gRPC tunnels)
             # Rathole: reverse tunnel, needs Rathole server on panel
-            needs_tcp_forwarding = db_tunnel.type in ["tcp", "ws", "grpc"] and db_tunnel.core == "xray"
+            needs_gost_forwarding = db_tunnel.type in ["tcp", "udp", "ws", "grpc"] and db_tunnel.core == "xray"
             needs_rathole_server = db_tunnel.core == "rathole"
             
-            if needs_tcp_forwarding:
+            if needs_gost_forwarding:
                 remote_port = db_tunnel.spec.get("remote_port") or db_tunnel.spec.get("listen_port")
-                if remote_port and hasattr(request.app.state, 'port_forwarder'):
+                if remote_port and hasattr(request.app.state, 'gost_forwarder'):
+                    # Get node IP address from metadata
                     node_address = node.node_metadata.get("ip_address") if node.node_metadata else None
+                    if not node_address:
+                        # Try to extract from api_address
+                        api_address = node.node_metadata.get("api_address", "") if node.node_metadata else ""
+                        if api_address:
+                            # Extract host from http://host:port or host:port
+                            if "://" in api_address:
+                                api_address = api_address.split("://")[-1]
+                            if ":" in api_address:
+                                node_address = api_address.split(":")[0]
+                            else:
+                                node_address = api_address
+                    
                     if node_address:
                         try:
-                            await request.app.state.port_forwarder.start_forward(
+                            # Use gost for forwarding
+                            request.app.state.gost_forwarder.start_forward(
+                                tunnel_id=db_tunnel.id,
                                 local_port=int(remote_port),
                                 node_address=node_address,
-                                remote_port=int(remote_port)
+                                remote_port=int(remote_port),
+                                tunnel_type=db_tunnel.type
                             )
                         except Exception as e:
                             # Log but don't fail tunnel creation
                             import logging
-                            logging.error(f"Failed to start port forwarding: {e}")
+                            error_msg = str(e)
+                            logging.error(f"Failed to start gost forwarding: {error_msg}")
+                            db_tunnel.status = "error"
+                            db_tunnel.error_message = f"Gost forwarding error: {error_msg}"
+                    else:
+                        db_tunnel.status = "error"
+                        db_tunnel.error_message = "Node IP address not found in metadata"
             
             elif needs_rathole_server:
                 # Start Rathole server on panel
@@ -349,18 +369,17 @@ async def delete_tunnel(tunnel_id: str, request: Request, db: AsyncSession = Dep
     if not tunnel:
         raise HTTPException(status_code=404, detail="Tunnel not found")
     
-    # Stop port forwarding on panel (only for TCP-based tunnels)
-    needs_tcp_forwarding = tunnel.type in ["tcp", "ws", "grpc"] and tunnel.core == "xray"
+    # Stop forwarding on panel (for TCP/UDP/WS/gRPC tunnels)
+    needs_gost_forwarding = tunnel.type in ["tcp", "udp", "ws", "grpc"] and tunnel.core == "xray"
     needs_rathole_server = tunnel.core == "rathole"
     
-    if needs_tcp_forwarding:
-        remote_port = tunnel.spec.get("remote_port") or tunnel.spec.get("listen_port")
-        if remote_port and hasattr(request.app.state, 'port_forwarder'):
+    if needs_gost_forwarding:
+        if hasattr(request.app.state, 'gost_forwarder'):
             try:
-                await request.app.state.port_forwarder.stop_forward(int(remote_port))
+                request.app.state.gost_forwarder.stop_forward(tunnel.id)
             except Exception as e:
                 import logging
-                logging.error(f"Failed to stop port forwarding: {e}")
+                logging.error(f"Failed to stop gost forwarding: {e}")
     
     elif needs_rathole_server:
         # Stop Rathole server on panel
@@ -395,7 +414,6 @@ async def delete_tunnel(tunnel_id: str, request: Request, db: AsyncSession = Dep
 async def update_tunnel(tunnel_id: str, tunnel: TunnelUpdate, request: Request, db: AsyncSession = Depends(get_db)):
     """Update a tunnel"""
     from app.hysteria2_client import Hysteria2Client
-    from app.port_forwarder import port_forwarder
     
     result = await db.execute(select(Tunnel).where(Tunnel.id == tunnel_id))
     db_tunnel = result.scalar_one_or_none()
@@ -422,15 +440,14 @@ async def update_tunnel(tunnel_id: str, tunnel: TunnelUpdate, request: Request, 
         if node:
             client = Hysteria2Client()
             try:
-                # Stop old port forwarding or Rathole server
-                old_needs_tcp_forwarding = db_tunnel.type in ["tcp", "ws", "grpc"] and db_tunnel.core == "xray"
+                # Stop old forwarding or Rathole server
+                old_needs_gost_forwarding = db_tunnel.type in ["tcp", "udp", "ws", "grpc"] and db_tunnel.core == "xray"
                 old_needs_rathole_server = db_tunnel.core == "rathole"
                 
-                if old_needs_tcp_forwarding:
-                    old_remote_port = db_tunnel.spec.get("remote_port") or db_tunnel.spec.get("listen_port")
-                    if old_remote_port and hasattr(request.app.state, 'port_forwarder'):
+                if old_needs_gost_forwarding:
+                    if hasattr(request.app.state, 'gost_forwarder'):
                         try:
-                            await port_forwarder.stop_forward(int(old_remote_port))
+                            request.app.state.gost_forwarder.stop_forward(db_tunnel.id)
                         except:
                             pass
                 elif old_needs_rathole_server:
@@ -454,24 +471,37 @@ async def update_tunnel(tunnel_id: str, tunnel: TunnelUpdate, request: Request, 
                 
                 if response.get("status") == "success":
                     db_tunnel.status = "active"
-                    # Start new port forwarding or Rathole server if needed
-                    needs_tcp_forwarding = db_tunnel.type in ["tcp", "ws", "grpc"] and db_tunnel.core == "xray"
+                    # Start new forwarding or Rathole server if needed
+                    needs_gost_forwarding = db_tunnel.type in ["tcp", "udp", "ws", "grpc"] and db_tunnel.core == "xray"
                     needs_rathole_server = db_tunnel.core == "rathole"
                     
-                    if needs_tcp_forwarding:
+                    if needs_gost_forwarding:
                         remote_port = db_tunnel.spec.get("remote_port") or db_tunnel.spec.get("listen_port")
-                        if remote_port and hasattr(request.app.state, 'port_forwarder'):
+                        if remote_port and hasattr(request.app.state, 'gost_forwarder'):
                             node_address = node.node_metadata.get("ip_address") if node.node_metadata else None
+                            if not node_address:
+                                # Try to extract from api_address
+                                api_address = node.node_metadata.get("api_address", "") if node.node_metadata else ""
+                                if api_address:
+                                    if "://" in api_address:
+                                        api_address = api_address.split("://")[-1]
+                                    if ":" in api_address:
+                                        node_address = api_address.split(":")[0]
+                                    else:
+                                        node_address = api_address
+                            
                             if node_address:
                                 try:
-                                    await port_forwarder.start_forward(
+                                    request.app.state.gost_forwarder.start_forward(
+                                        tunnel_id=db_tunnel.id,
                                         local_port=int(remote_port),
                                         node_address=node_address,
-                                        remote_port=int(remote_port)
+                                        remote_port=int(remote_port),
+                                        tunnel_type=db_tunnel.type
                                     )
                                 except Exception as e:
                                     import logging
-                                    logging.error(f"Failed to start port forwarding: {e}")
+                                    logging.error(f"Failed to start gost forwarding: {e}")
                     
                     elif needs_rathole_server:
                         remote_addr = db_tunnel.spec.get("remote_addr")

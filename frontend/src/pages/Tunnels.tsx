@@ -36,9 +36,6 @@ const Tunnels = () => {
       window.history.replaceState({}, '', '/tunnels')
     }
     
-    // Refresh data every 30 seconds to update usage
-    const interval = setInterval(fetchData, 30000)
-    return () => clearInterval(interval)
   }, [])
 
   const fetchData = async () => {
@@ -85,30 +82,31 @@ const Tunnels = () => {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         {tunnels.map((tunnel) => (
           <div
             key={tunnel.id}
-            className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4"
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 sm:p-6 transition-all hover:shadow-md"
           >
-            <div className="flex justify-between items-start mb-2">
-              <div>
-                <h3 className="text-base font-semibold text-gray-900 dark:text-white">{tunnel.name}</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            {/* Header */}
+            <div className="flex justify-between items-start mb-4">
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">{tunnel.name}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
                   {tunnel.core} / {tunnel.type}
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 ml-2">
                 <button
                   onClick={() => setEditingTunnel(tunnel)}
-                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                  className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
                   title="Edit tunnel"
                 >
                   <Edit2 size={18} />
                 </button>
                 <button
                   onClick={() => deleteTunnel(tunnel.id)}
-                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                  className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                   title="Delete tunnel"
                 >
                   <Trash2 size={18} />
@@ -116,100 +114,68 @@ const Tunnels = () => {
               </div>
             </div>
 
+            {/* Error Message */}
             {tunnel.status === 'error' && tunnel.error_message && (
-              <div className="mb-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                 <p className="text-xs font-medium text-red-800 dark:text-red-200 mb-1">Error</p>
                 <p className="text-sm text-red-700 dark:text-red-300">{tunnel.error_message}</p>
               </div>
             )}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-2">
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Status</p>
-                <span
-                  className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                    tunnel.status === 'active'
-                      ? 'bg-green-100 text-green-800'
-                      : tunnel.status === 'error'
-                      ? 'bg-red-100 text-red-800'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}
-                >
-                  {tunnel.status}
-                </span>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Usage</p>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    {tunnel.quota_mb > 0 
-                      ? `${tunnel.used_mb.toFixed(2)} MB / ${(tunnel.quota_mb / 1024).toFixed(0)} GB`
-                      : `${tunnel.used_mb.toFixed(2)} MB`
-                    }
-                  </p>
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                    <div
-                      className="bg-blue-600 h-2 rounded-full transition-all"
-                      style={{ 
-                        width: tunnel.quota_mb > 0 
-                          ? `${Math.min((tunnel.used_mb / tunnel.quota_mb) * 100, 100)}%`
-                          : tunnel.used_mb > 0 
-                            ? '100%'
-                            : '0%'
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Revision</p>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">{tunnel.revision}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Expires</p>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">
-                  {tunnel.expires_at
-                    ? new Date(tunnel.expires_at).toLocaleDateString()
-                    : 'Never'}
-                </p>
-              </div>
+
+            {/* Status Badge */}
+            <div className="mb-4">
+              <span
+                className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
+                  tunnel.status === 'active'
+                    ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200'
+                    : tunnel.status === 'error'
+                    ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
+                }`}
+              >
+                {tunnel.status}
+              </span>
             </div>
             
             {/* Port Details */}
-            <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
-                <div>
-                  <p className="text-gray-500 dark:text-gray-400 mb-1">Proxy Port</p>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    {tunnel.spec?.remote_port || tunnel.spec?.listen_port || 'N/A'}
-                  </p>
-                </div>
-                {tunnel.core === 'rathole' && (
-                  <>
-                    <div>
-                      <p className="text-gray-500 dark:text-gray-400 mb-1">Rathole Port</p>
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">
-                        {tunnel.spec?.remote_addr ? tunnel.spec.remote_addr.split(':')[1] : 'N/A'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-gray-500 dark:text-gray-400 mb-1">Local Port</p>
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">
-                        {tunnel.spec?.local_addr ? tunnel.spec.local_addr.split(':')[1] : 'N/A'}
-                      </p>
-                    </div>
-                  </>
-                )}
-                {tunnel.core === 'xray' && tunnel.spec?.forward_to && (
-                  <div>
-                    <p className="text-gray-500 dark:text-gray-400 mb-1">Forward To</p>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      {tunnel.spec.forward_to}
-                    </p>
-                  </div>
-                )}
+            <div className="space-y-3 mb-4">
+              <div className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700">
+                <span className="text-sm text-gray-500 dark:text-gray-400">Proxy Port</span>
+                <span className="text-sm font-medium text-gray-900 dark:text-white">
+                  {tunnel.spec?.remote_port || tunnel.spec?.listen_port || 'N/A'}
+                </span>
               </div>
+              {tunnel.core === 'rathole' && (
+                <>
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700">
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Rathole Port</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">
+                      {tunnel.spec?.remote_addr ? tunnel.spec.remote_addr.split(':')[1] : 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700">
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Local Port</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">
+                      {tunnel.spec?.local_addr ? tunnel.spec.local_addr.split(':')[1] : 'N/A'}
+                    </span>
+                  </div>
+                </>
+              )}
+              {tunnel.core === 'xray' && tunnel.spec?.forward_to && (
+                <div className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700">
+                  <span className="text-sm text-gray-500 dark:text-gray-400">Forward To</span>
+                  <span className="text-sm font-medium text-gray-900 dark:text-white break-all ml-2">
+                    {tunnel.spec.forward_to}
+                  </span>
+                </div>
+              )}
             </div>
 
+            {/* Footer Info */}
+            <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 pt-3 border-t border-gray-100 dark:border-gray-700">
+              <span>Revision {tunnel.revision}</span>
+              <span>{tunnel.expires_at ? new Date(tunnel.expires_at).toLocaleDateString() : 'Never expires'}</span>
+            </div>
           </div>
         ))}
       </div>

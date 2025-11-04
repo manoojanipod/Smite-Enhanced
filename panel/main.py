@@ -18,7 +18,7 @@ from app.config import settings
 from app.database import init_db
 from app.routers import nodes, tunnels, panel, usage, status, logs, auth
 from app.hysteria2_server import Hysteria2Server
-from app.port_forwarder import port_forwarder
+from app.gost_forwarder import gost_forwarder
 from app.rathole_server import rathole_server_manager
 import logging
 
@@ -52,14 +52,14 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Failed to generate CA certificate on startup: {e}")
         # Don't fail startup if cert generation fails
     
-    # Initialize port forwarder
-    app.state.port_forwarder = port_forwarder
+    # Initialize gost forwarder
+    app.state.gost_forwarder = gost_forwarder
     
     # Initialize Rathole server manager
     app.state.rathole_server_manager = rathole_server_manager
     
-    # Restore active tunnels' port forwarding on startup
-    await _restore_port_forwards()
+    # Restore active tunnels' forwarding on startup
+    await _restore_forwards()
     
     # Restore active Rathole servers on startup
     await _restore_rathole_servers()
@@ -70,24 +70,24 @@ async def lifespan(app: FastAPI):
     if hasattr(app.state, 'h2_server'):
         await app.state.h2_server.stop()
     
-    # Stop all port forwarding
-    await port_forwarder.cleanup_all()
+    # Stop all gost forwarding
+    gost_forwarder.cleanup_all()
     
     # Stop all Rathole servers
     rathole_server_manager.cleanup_all()
 
 
-async def _restore_port_forwards():
-    """Restore port forwarding for active tunnels on startup"""
+async def _restore_forwards():
+    """Restore forwarding for active tunnels on startup"""
     try:
         async with AsyncSessionLocal() as db:
             result = await db.execute(select(Tunnel).where(Tunnel.status == "active"))
             tunnels = result.scalars().all()
             
             for tunnel in tunnels:
-                # Only restore TCP-based tunnels
-                needs_tcp_forwarding = tunnel.type in ["tcp", "ws", "grpc"] and tunnel.core == "xray"
-                if not needs_tcp_forwarding:
+                # Only restore xray tunnels (tcp, udp, ws, grpc)
+                needs_gost_forwarding = tunnel.type in ["tcp", "udp", "ws", "grpc"] and tunnel.core == "xray"
+                if not needs_gost_forwarding:
                     continue
                 
                 remote_port = tunnel.spec.get("remote_port") or tunnel.spec.get("listen_port")
@@ -103,16 +103,32 @@ async def _restore_port_forwards():
                 # Get node address
                 node_address = node.node_metadata.get("ip_address") if node.node_metadata else None
                 if not node_address:
+                    # Try to extract from api_address
+                    api_address = node.node_metadata.get("api_address", "") if node.node_metadata else ""
+                    if api_address:
+                        if "://" in api_address:
+                            api_address = api_address.split("://")[-1]
+                        if ":" in api_address:
+                            node_address = api_address.split(":")[0]
+                        else:
+                            node_address = api_address
+                
+                if not node_address:
                     continue
                 
-                # Start forwarding
-                await port_forwarder.start_forward(
-                    local_port=int(remote_port),
-                    node_address=node_address,
-                    remote_port=int(remote_port)
-                )
+                # Start gost forwarding
+                try:
+                    gost_forwarder.start_forward(
+                        tunnel_id=tunnel.id,
+                        local_port=int(remote_port),
+                        node_address=node_address,
+                        remote_port=int(remote_port),
+                        tunnel_type=tunnel.type
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to restore forwarding for tunnel {tunnel.id}: {e}")
     except Exception as e:
-        logger.error(f"Error restoring port forwards: {e}")
+        logger.error(f"Error restoring forwards: {e}")
 
 
 async def _restore_rathole_servers():
