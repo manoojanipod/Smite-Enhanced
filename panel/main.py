@@ -31,10 +31,26 @@ async def lifespan(app: FastAPI):
     # Initialize database
     await init_db()
     
-    # Start Hysteria2 server if enabled (cert generation)
+    # Start Hysteria2 server (for cert generation - always needed for CA cert)
     h2_server = Hysteria2Server()
     await h2_server.start()
     app.state.h2_server = h2_server
+    
+    # Ensure CA certificate is generated on startup
+    try:
+        cert_path = Path(settings.hysteria2_cert_path)
+        if not cert_path.is_absolute():
+            cert_path = Path(os.getcwd()) / cert_path
+        
+        if not cert_path.exists() or cert_path.stat().st_size == 0:
+            logger.info("Generating CA certificate on startup...")
+            h2_server.cert_path = str(cert_path)
+            h2_server.key_path = str(cert_path.parent / "ca.key")
+            await h2_server._generate_certs()
+            logger.info(f"CA certificate generated at {cert_path}")
+    except Exception as e:
+        logger.warning(f"Failed to generate CA certificate on startup: {e}")
+        # Don't fail startup if cert generation fails
     
     # Initialize port forwarder
     app.state.port_forwarder = port_forwarder

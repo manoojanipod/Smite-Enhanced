@@ -120,6 +120,10 @@ if [ "$USE_DOMAIN" = "y" ] || [ "$USE_DOMAIN" = "Y" ]; then
     read -p "Enter your domain name (e.g., panel.example.com): " DOMAIN
     if [ -n "$DOMAIN" ]; then
         read -p "Enter your email for Let's Encrypt notifications: " DOMAIN_EMAIL
+        if [ -z "$DOMAIN_EMAIL" ]; then
+            echo -e "${YELLOW}Email is required for Let's Encrypt.${NC}"
+            read -p "Enter your email for Let's Encrypt notifications: " DOMAIN_EMAIL
+        fi
         if [ -n "$DOMAIN_EMAIL" ]; then
             NGINX_ENABLED="true"
             echo "HTTPS will be automatically configured with Let's Encrypt"
