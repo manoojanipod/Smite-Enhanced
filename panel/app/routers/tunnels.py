@@ -135,8 +135,10 @@ async def create_tunnel(tunnel: TunnelCreate, request: Request, db: AsyncSession
             # Force log output - use print as well to ensure we see it
             log_msg = f"Tunnel {db_tunnel.id}: needs_gost_forwarding={needs_gost_forwarding}, needs_rathole_server={needs_rathole_server}, type={db_tunnel.type}, core={db_tunnel.core}"
             debug_print(log_msg)
+            debug_print(f"DEBUG: About to check if needs_gost_forwarding (value: {needs_gost_forwarding}, type: {type(needs_gost_forwarding)})")
             
             if needs_gost_forwarding:
+                debug_print(f"DEBUG: INSIDE if needs_gost_forwarding block!")
                 debug_print(f"DEBUG: Entering gost forwarding block for tunnel {db_tunnel.id}")
                 remote_port = db_tunnel.spec.get("remote_port") or db_tunnel.spec.get("listen_port")
                 debug_print(f"DEBUG: Tunnel {db_tunnel.id}: remote_port={remote_port}, spec={db_tunnel.spec}")
