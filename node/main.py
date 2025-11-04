@@ -30,17 +30,19 @@ async def usage_reporting_task(app: FastAPI):
             for tunnel_id, adapter in adapter_manager.active_tunnels.items():
                 try:
                     usage_mb = adapter.get_usage_mb(tunnel_id)
-                    total_bytes = int(usage_mb * 1024 * 1024)
                     
                     # Calculate incremental usage
                     # adapter_manager.usage_tracking stores MB as float
                     previous_mb = adapter_manager.usage_tracking.get(tunnel_id, 0.0)
-                    previous_bytes = int(previous_mb * 1024 * 1024)
                     
-                    if total_bytes > previous_bytes:
-                        incremental_bytes = total_bytes - previous_bytes
+                    # Both are in MB now, so compare directly
+                    if usage_mb > previous_mb:
+                        incremental_mb = usage_mb - previous_mb
                         # Store in MB
                         adapter_manager.usage_tracking[tunnel_id] = usage_mb
+                        
+                        # Convert to bytes for reporting
+                        incremental_bytes = int(incremental_mb * 1024 * 1024)
                         
                         if incremental_bytes > 0:
                             await h2_client.push_usage_to_panel(
@@ -48,7 +50,7 @@ async def usage_reporting_task(app: FastAPI):
                                 node_id=h2_client.node_id,
                                 bytes_used=incremental_bytes
                             )
-                    elif previous_bytes == 0 and total_bytes > 0:
+                    elif previous_mb == 0.0 and usage_mb > 0:
                         # First time tracking, store but don't report
                         adapter_manager.usage_tracking[tunnel_id] = usage_mb
                 except Exception as e:
