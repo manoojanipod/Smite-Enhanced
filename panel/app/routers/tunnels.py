@@ -159,52 +159,52 @@ async def create_tunnel(tunnel: TunnelCreate, request: Request, db: AsyncSession
             debug_print(f"DEBUG: bool(needs_gost_forwarding)? {bool(needs_gost_forwarding)}")
             
             if needs_gost_forwarding:
-                    debug_print(f"DEBUG: INSIDE if needs_gost_forwarding block!")
-                    debug_print(f"DEBUG: Entering gost forwarding block for tunnel {db_tunnel.id}")
-                    # panel_port: port on panel where gost listens (remote_port from spec)
-                    # forward_to: target address:port to forward to (e.g., "127.0.0.1:9999")
-                    panel_port = db_tunnel.spec.get("remote_port") or db_tunnel.spec.get("listen_port")
-                    forward_to = db_tunnel.spec.get("forward_to")
-                    debug_print(f"DEBUG: Tunnel {db_tunnel.id}: panel_port={panel_port}, forward_to={forward_to}, spec={db_tunnel.spec}")
-                    debug_print(f"DEBUG: Tunnel {db_tunnel.id}: has gost_forwarder={hasattr(request.app.state, 'gost_forwarder')}")
-                    if panel_port and forward_to and hasattr(request.app.state, 'gost_forwarder'):
-                        debug_print(f"DEBUG: Conditions met - will start gost forwarding directly to target")
-                        try:
-                            # Use gost for forwarding: listen on panel_port, forward directly to forward_to
-                            debug_print(f"DEBUG: About to call start_forward() with: tunnel_id={db_tunnel.id}, local_port={panel_port}, forward_to={forward_to}, tunnel_type={db_tunnel.type}")
-                            logger.info(f"Starting gost forwarding for tunnel {db_tunnel.id}: {db_tunnel.type}://:{panel_port} -> {forward_to}")
-                            request.app.state.gost_forwarder.start_forward(
-                                tunnel_id=db_tunnel.id,
-                                local_port=int(panel_port),
-                                forward_to=forward_to,
-                                tunnel_type=db_tunnel.type
-                            )
-                            debug_print(f"DEBUG: start_forward() returned successfully")
-                            logger.info(f"Successfully started gost forwarding for tunnel {db_tunnel.id}")
-                        except Exception as e:
-                            debug_print(f"DEBUG: Exception in start_forward(): {e}")
-                            import traceback
-                            debug_print(f"DEBUG: Traceback: {traceback.format_exc()}")
-                            error_msg = str(e)
-                            logger.error(f"Failed to start gost forwarding for tunnel {db_tunnel.id}: {error_msg}", exc_info=True)
-                            db_tunnel.status = "error"
-                            db_tunnel.error_message = f"Gost forwarding error: {error_msg}"
-                    else:
-                        missing = []
-                        if not panel_port:
-                            missing.append("panel_port")
-                        if not forward_to:
-                            missing.append("forward_to")
-                        if not hasattr(request.app.state, 'gost_forwarder'):
-                            missing.append("gost_forwarder")
-                        logger.warning(f"Tunnel {db_tunnel.id}: Missing required fields: {missing}")
-                        debug_print(f"DEBUG: Missing: {missing}, panel_port={panel_port}, forward_to={forward_to}")
-                        if not forward_to:
-                            error_msg = "forward_to is required for gost tunnels"
-                            db_tunnel.status = "error"
-                            db_tunnel.error_message = error_msg
-                
-                elif needs_rathole_server:
+                debug_print(f"DEBUG: INSIDE if needs_gost_forwarding block!")
+                debug_print(f"DEBUG: Entering gost forwarding block for tunnel {db_tunnel.id}")
+                # panel_port: port on panel where gost listens (remote_port from spec)
+                # forward_to: target address:port to forward to (e.g., "127.0.0.1:9999")
+                panel_port = db_tunnel.spec.get("remote_port") or db_tunnel.spec.get("listen_port")
+                forward_to = db_tunnel.spec.get("forward_to")
+                debug_print(f"DEBUG: Tunnel {db_tunnel.id}: panel_port={panel_port}, forward_to={forward_to}, spec={db_tunnel.spec}")
+                debug_print(f"DEBUG: Tunnel {db_tunnel.id}: has gost_forwarder={hasattr(request.app.state, 'gost_forwarder')}")
+                if panel_port and forward_to and hasattr(request.app.state, 'gost_forwarder'):
+                    debug_print(f"DEBUG: Conditions met - will start gost forwarding directly to target")
+                    try:
+                        # Use gost for forwarding: listen on panel_port, forward directly to forward_to
+                        debug_print(f"DEBUG: About to call start_forward() with: tunnel_id={db_tunnel.id}, local_port={panel_port}, forward_to={forward_to}, tunnel_type={db_tunnel.type}")
+                        logger.info(f"Starting gost forwarding for tunnel {db_tunnel.id}: {db_tunnel.type}://:{panel_port} -> {forward_to}")
+                        request.app.state.gost_forwarder.start_forward(
+                            tunnel_id=db_tunnel.id,
+                            local_port=int(panel_port),
+                            forward_to=forward_to,
+                            tunnel_type=db_tunnel.type
+                        )
+                        debug_print(f"DEBUG: start_forward() returned successfully")
+                        logger.info(f"Successfully started gost forwarding for tunnel {db_tunnel.id}")
+                    except Exception as e:
+                        debug_print(f"DEBUG: Exception in start_forward(): {e}")
+                        import traceback
+                        debug_print(f"DEBUG: Traceback: {traceback.format_exc()}")
+                        error_msg = str(e)
+                        logger.error(f"Failed to start gost forwarding for tunnel {db_tunnel.id}: {error_msg}", exc_info=True)
+                        db_tunnel.status = "error"
+                        db_tunnel.error_message = f"Gost forwarding error: {error_msg}"
+                else:
+                    missing = []
+                    if not panel_port:
+                        missing.append("panel_port")
+                    if not forward_to:
+                        missing.append("forward_to")
+                    if not hasattr(request.app.state, 'gost_forwarder'):
+                        missing.append("gost_forwarder")
+                    logger.warning(f"Tunnel {db_tunnel.id}: Missing required fields: {missing}")
+                    debug_print(f"DEBUG: Missing: {missing}, panel_port={panel_port}, forward_to={forward_to}")
+                    if not forward_to:
+                        error_msg = "forward_to is required for gost tunnels"
+                        db_tunnel.status = "error"
+                        db_tunnel.error_message = error_msg
+            
+            elif needs_rathole_server:
                     # Start Rathole server on panel
                     remote_addr = db_tunnel.spec.get("remote_addr")
                     token = db_tunnel.spec.get("token")
