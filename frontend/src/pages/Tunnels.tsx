@@ -9,9 +9,6 @@ interface Tunnel {
   type: string
   node_id: string
   spec: Record<string, any>
-  quota_mb: number
-  used_mb: number
-  expires_at: string | null
   status: string
   error_message?: string | null
   revision: number
@@ -174,7 +171,6 @@ const Tunnels = () => {
             {/* Footer Info */}
             <div className="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400 pt-3 border-t border-gray-100 dark:border-gray-700">
               <span>Revision {tunnel.revision}</span>
-              <span>{tunnel.expires_at ? new Date(tunnel.expires_at).toLocaleDateString() : 'Never expires'}</span>
             </div>
           </div>
         ))}
@@ -216,9 +212,6 @@ interface EditTunnelModalProps {
 const EditTunnelModal = ({ tunnel, onClose, onSuccess }: EditTunnelModalProps) => {
   const [formData, setFormData] = useState({
     name: tunnel.name,
-    quota_mb: tunnel.quota_mb,
-    expires_days: '',
-    expires_date: tunnel.expires_at ? tunnel.expires_at.split('T')[0] : '',
     remote_port: tunnel.spec?.remote_port || tunnel.spec?.listen_port || 10000,
     forward_port: tunnel.spec?.forward_to ? tunnel.spec.forward_to.split(':')[1] : '',
     rathole_remote_addr: tunnel.spec?.remote_addr || '',
@@ -228,18 +221,6 @@ const EditTunnelModal = ({ tunnel, onClose, onSuccess }: EditTunnelModalProps) =
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      let expires_at: string | null = null
-      if (formData.expires_days) {
-        const days = parseInt(formData.expires_days)
-        if (days > 0) {
-          const expiryDate = new Date()
-          expiryDate.setDate(expiryDate.getDate() + days)
-          expires_at = expiryDate.toISOString().split('T')[0] + 'T00:00:00'
-        }
-      } else if (formData.expires_date) {
-        expires_at = formData.expires_date + 'T00:00:00'
-      }
-
       // Build updated spec
       const updatedSpec = { ...tunnel.spec }
       updatedSpec.remote_port = parseInt(formData.remote_port.toString()) || 10000
@@ -254,7 +235,7 @@ const EditTunnelModal = ({ tunnel, onClose, onSuccess }: EditTunnelModalProps) =
         if (formData.rathole_local_port) {
           updatedSpec.local_addr = `127.0.0.1:${formData.rathole_local_port}`
         }
-      } else if (tunnel.core === 'xray' && (tunnel.type === 'tcp' || tunnel.type === 'udp' || tunnel.type === 'ws' || tunnel.type === 'grpc')) {
+      } else if (tunnel.core === 'xray' && (tunnel.type === 'tcp' || tunnel.type === 'udp' || tunnel.type === 'ws' || tunnel.type === 'grpc' || tunnel.type === 'tcpmux')) {
         if (formData.forward_port) {
           updatedSpec.forward_to = `127.0.0.1:${formData.forward_port}`
         }
@@ -262,8 +243,6 @@ const EditTunnelModal = ({ tunnel, onClose, onSuccess }: EditTunnelModalProps) =
 
       await api.put(`/tunnels/${tunnel.id}`, {
         name: formData.name,
-        quota_mb: formData.quota_mb,
-        expires_at: expires_at,
         spec: updatedSpec,
       })
       onSuccess()
@@ -290,21 +269,6 @@ const EditTunnelModal = ({ tunnel, onClose, onSuccess }: EditTunnelModalProps) =
               required
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Quota (MB, 0 = unlimited)
-            </label>
-            <input
-              type="number"
-              value={formData.quota_mb}
-              onChange={(e) =>
-                setFormData({ ...formData, quota_mb: parseFloat(e.target.value) || 0 })
-              }
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
-              min="0"
-            />
-          </div>
-          
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Proxy Port
@@ -375,39 +339,6 @@ const EditTunnelModal = ({ tunnel, onClose, onSuccess }: EditTunnelModalProps) =
             </div>
           )}
           
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Expires In (days)
-              </label>
-              <input
-                type="number"
-                value={formData.expires_days}
-                onChange={(e) => {
-                  const days = e.target.value
-                  setFormData({ ...formData, expires_days: days, expires_date: '' })
-                }}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
-                min="1"
-                placeholder="e.g., 30"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Or Expires On (date)
-              </label>
-              <input
-                type="date"
-                value={formData.expires_date}
-                onChange={(e) => {
-                  const date = e.target.value
-                  setFormData({ ...formData, expires_date: date, expires_days: '' })
-                }}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
-                min={new Date().toISOString().split('T')[0]}
-              />
-            </div>
-          </div>
           <div className="flex gap-3 justify-end">
             <button
               type="button"
@@ -441,9 +372,6 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
     core: 'xray',
     type: 'tcp',
     node_id: '',
-    quota_mb: 0,
-    expires_days: '',
-    expires_date: '',
     remote_port: 10000,
     forward_to: '127.0.0.1:2053',
     forward_port: '2053',
@@ -456,19 +384,6 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      // Calculate expires_at from days or date
-      let expires_at: string | null = null
-      if (formData.expires_days) {
-        const days = parseInt(formData.expires_days)
-        if (days > 0) {
-          const expiryDate = new Date()
-          expiryDate.setDate(expiryDate.getDate() + days)
-          expires_at = expiryDate.toISOString().split('T')[0] + 'T00:00:00'
-        }
-      } else if (formData.expires_date) {
-        expires_at = formData.expires_date + 'T00:00:00'
-      }
-
       const spec = getSpecForType(formData.core, formData.type)
       spec.remote_port = parseInt(formData.remote_port.toString()) || 10000
       
@@ -497,8 +412,6 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
         core: formData.core,
         type: formData.type,
         node_id: formData.node_id,
-        quota_mb: formData.quota_mb,
-        expires_at: expires_at,
         spec: spec,
       }
       await api.post('/tunnels', payload)
@@ -684,20 +597,6 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
               </div>
             )}
             {formData.core !== 'rathole' && !(formData.core === 'xray' && (formData.type === 'tcp' || formData.type === 'udp' || formData.type === 'ws' || formData.type === 'grpc')) && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Quota (MB, 0 = unlimited)
-                </label>
-                <input
-                  type="number"
-                  value={formData.quota_mb}
-                  onChange={(e) =>
-                    setFormData({ ...formData, quota_mb: parseFloat(e.target.value) || 0 })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
-                  min="0"
-                />
-              </div>
             )}
             {formData.core === 'rathole' && (
               <div>
@@ -718,23 +617,6 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
               </div>
             )}
           </div>
-          
-          {formData.core === 'xray' && (formData.type === 'tcp' || formData.type === 'udp' || formData.type === 'ws' || formData.type === 'grpc') && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Quota (MB, 0 = unlimited)
-              </label>
-              <input
-                type="number"
-                value={formData.quota_mb}
-                onChange={(e) =>
-                  setFormData({ ...formData, quota_mb: parseFloat(e.target.value) || 0 })
-                }
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
-                min="0"
-              />
-            </div>
-          )}
           
           {formData.core === 'rathole' && (
             <div className="grid grid-cols-2 gap-4">
@@ -774,40 +656,6 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
               </div>
             </div>
           )}
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Expires In (days)
-              </label>
-              <input
-                type="number"
-                value={formData.expires_days}
-                onChange={(e) => {
-                  const days = e.target.value
-                  setFormData({ ...formData, expires_days: days, expires_date: '' })
-                }}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
-                min="1"
-                placeholder="e.g., 30"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Or Expires On (date)
-              </label>
-              <input
-                type="date"
-                value={formData.expires_date}
-                onChange={(e) => {
-                  const date = e.target.value
-                  setFormData({ ...formData, expires_date: date, expires_days: '' })
-                }}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
-                min={new Date().toISOString().split('T')[0]}
-              />
-            </div>
-          </div>
 
           <div className="flex gap-3 justify-end">
             <button

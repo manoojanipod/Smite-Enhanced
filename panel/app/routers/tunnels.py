@@ -28,15 +28,11 @@ class TunnelCreate(BaseModel):
     type: str
     node_id: str
     spec: dict
-    quota_mb: float = 0
-    expires_at: datetime | None = None
 
 
 class TunnelUpdate(BaseModel):
     name: str | None = None
     spec: dict | None = None
-    quota_mb: float | None = None
-    expires_at: datetime | None = None
 
 
 class TunnelResponse(BaseModel):
@@ -46,9 +42,6 @@ class TunnelResponse(BaseModel):
     type: str
     node_id: str
     spec: dict
-    quota_mb: float
-    used_mb: float
-    expires_at: datetime | None
     status: str
     error_message: str | None = None
     revision: int
@@ -81,8 +74,6 @@ async def create_tunnel(tunnel: TunnelCreate, request: Request, db: AsyncSession
         type=tunnel.type,
         node_id=tunnel.node_id,
         spec=tunnel.spec,
-        quota_mb=tunnel.quota_mb,
-        expires_at=tunnel.expires_at,
         status="pending"
     )
     db.add(db_tunnel)
@@ -299,10 +290,6 @@ async def update_tunnel(
         tunnel.name = tunnel_update.name
     if tunnel_update.spec is not None:
         tunnel.spec = tunnel_update.spec
-    if tunnel_update.quota_mb is not None:
-        tunnel.quota_mb = tunnel_update.quota_mb
-    if tunnel_update.expires_at is not None:
-        tunnel.expires_at = tunnel_update.expires_at
     
     tunnel.revision += 1
     tunnel.updated_at = datetime.utcnow()
@@ -482,10 +469,6 @@ async def update_tunnel(tunnel_id: str, tunnel: TunnelUpdate, request: Request, 
         db_tunnel.name = tunnel.name
     if tunnel.spec is not None:
         db_tunnel.spec = tunnel.spec
-    if tunnel.quota_mb is not None:
-        db_tunnel.quota_mb = tunnel.quota_mb
-    if tunnel.expires_at is not None:
-        db_tunnel.expires_at = tunnel.expires_at
     
     db_tunnel.revision += 1
     db_tunnel.updated_at = datetime.utcnow()
