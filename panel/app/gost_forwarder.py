@@ -101,17 +101,24 @@ class GostForwarder:
             # Start gost process
             try:
                 debug_print(f"About to start subprocess.Popen with cmd={cmd}")
-                proc = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    cwd=str(self.config_dir)
-                )
+                # Use unbuffered output and log to file for debugging
+                log_file = self.config_dir / f"gost_{tunnel_id}.log"
+                with open(log_file, 'w') as log_f:
+                    log_f.write(f"Starting gost with command: {' '.join(cmd)}\n")
+                    log_f.flush()
+                    proc = subprocess.Popen(
+                        cmd,
+                        stdout=log_f,
+                        stderr=subprocess.STDOUT,  # Combine stderr with stdout
+                        cwd=str(self.config_dir),
+                        start_new_session=True  # Detach from parent process group
+                    )
                 debug_print(f"subprocess.Popen returned, PID={proc.pid}")
+                logger.info(f"Started gost process for tunnel {tunnel_id}, PID={proc.pid}, log file: {log_file}")
             except Exception as e:
                 error_msg = f"Failed to start gost process: {e}"
                 debug_print(f"ERROR in subprocess.Popen: {error_msg}")
-                logger.error(error_msg)
+                logger.error(error_msg, exc_info=True)
                 raise RuntimeError(error_msg)
             
             # Wait a moment to check if process started successfully
@@ -123,15 +130,20 @@ class GostForwarder:
                 # Process died immediately
                 debug_print(f"Process died immediately, exit code: {poll_result}")
                 try:
-                    stderr = proc.stderr.read().decode() if proc.stderr else "Unknown error"
-                    stdout = proc.stdout.read().decode() if proc.stdout else ""
-                    debug_print(f"stderr: {stderr}")
-                    debug_print(f"stdout: {stdout}")
-                except Exception as e:
-                    stderr = f"Could not read error output: {e}"
+                    # Read from log file
+                    if log_file.exists():
+                        with open(log_file, 'r') as f:
+                            log_content = f.read()
+                            debug_print(f"Log file content: {log_content}")
+                            stderr = log_content
+                    else:
+                        stderr = "Log file not found"
                     stdout = ""
-                    debug_print(f"Exception reading process output: {e}")
-                error_msg = f"gost failed to start (exit code: {proc.returncode}): {stderr or stdout}"
+                except Exception as e:
+                    stderr = f"Could not read log file: {e}"
+                    stdout = ""
+                    debug_print(f"Exception reading log file: {e}")
+                error_msg = f"gost failed to start (exit code: {poll_result}): {stderr or stdout or 'Unknown error'}"
                 debug_print(f"ERROR: {error_msg}")
                 logger.error(error_msg)
                 raise RuntimeError(error_msg)
