@@ -25,14 +25,11 @@ const Tunnels = () => {
 
   useEffect(() => {
     fetchData()
-    // Check if we should open the modal from URL params
     const params = new URLSearchParams(window.location.search)
     if (params.get('create') === 'true') {
       setShowAddModal(true)
-      // Clean URL
       window.history.replaceState({}, '', '/tunnels')
     }
-    
   }, [])
 
   const fetchData = async () => {
@@ -74,18 +71,18 @@ const Tunnels = () => {
   }
 
   return (
-    <div className="w-full max-w-7xl mx-auto">
+    <div className="w-full max-w-7xl mx-auto" dir="rtl">
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Tunnels</h1>
-          <p className="text-gray-500 dark:text-gray-400">Manage your tunnel connections</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">مدیریت تانل‌ها</h1>
+          <p className="text-gray-500 dark:text-gray-400">مدیریت تونل‌های GOST / Rathole / Hysteria2 / WireGuard</p>
         </div>
         <button
           onClick={() => setShowAddModal(true)}
           className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 font-medium shadow-sm hover:shadow-md flex items-center gap-2"
         >
           <Plus size={20} />
-          Create Tunnel
+          ساخت تانل
         </button>
       </div>
 
@@ -98,9 +95,18 @@ const Tunnels = () => {
             {/* Header */}
             <div className="flex justify-between items-start mb-4">
               <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">{tunnel.name}</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                  {tunnel.name}
+                </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {tunnel.core === 'xray' ? 'gost' : tunnel.core} / {tunnel.type}
+                  {tunnel.core === 'xray'
+                    ? 'gost'
+                    : tunnel.core === 'hysteria2'
+                    ? 'Hysteria2'
+                    : tunnel.core === 'wireguard'
+                    ? 'WireGuard'
+                    : tunnel.core}{' '}
+                  / {tunnel.type}
                 </p>
                 {tunnel.node_id && (
                   <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
@@ -149,14 +155,18 @@ const Tunnels = () => {
               </span>
             </div>
             
-            {/* Port Details */}
+            {/* Port + extra details */}
             <div className="space-y-3 mb-4">
               <div className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700">
                 <span className="text-sm text-gray-500 dark:text-gray-400">Listen Port</span>
                 <span className="text-sm font-medium text-gray-900 dark:text-white">
-                  {tunnel.spec?.listen_port || tunnel.spec?.remote_port || 'N/A'}
+                  {tunnel.spec?.listen_port ||
+                    tunnel.spec?.remote_port ||
+                    tunnel.spec?.port ||
+                    'N/A'}
                 </span>
               </div>
+
               {tunnel.core === 'rathole' && (
                 <>
                   <div className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700">
@@ -173,13 +183,43 @@ const Tunnels = () => {
                   </div>
                 </>
               )}
-              {tunnel.core === 'xray' && (tunnel.spec?.forward_to || (tunnel.spec?.remote_ip && tunnel.spec?.remote_port)) && (
+
+              {tunnel.core === 'xray' &&
+                (tunnel.spec?.forward_to ||
+                  (tunnel.spec?.remote_ip && tunnel.spec?.remote_port)) && (
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700">
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Forward To</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-white break-all ml-2">
+                      {tunnel.spec.forward_to ||
+                        `${tunnel.spec.remote_ip}:${tunnel.spec.remote_port}`}
+                    </span>
+                  </div>
+                )}
+
+              {tunnel.core === 'hysteria2' && (
                 <div className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">Forward To</span>
-                  <span className="text-sm font-medium text-gray-900 dark:text-white break-all ml-2">
-                    {tunnel.spec.forward_to || `${tunnel.spec.remote_ip}:${tunnel.spec.remote_port}`}
+                  <span className="text-sm text-gray-500 dark:text-gray-400">Speed</span>
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">
+                    {tunnel.spec?.down || '-'} ↓ / {tunnel.spec?.up || '-'} ↑
                   </span>
                 </div>
+              )}
+
+              {tunnel.core === 'wireguard' && (
+                <>
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700">
+                    <span className="text-sm text-gray-500 dark:text-gray-400">CIDR</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">
+                      {tunnel.spec?.cidr || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700">
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Peers</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">
+                      {tunnel.spec?.peers ?? 'N/A'}
+                    </span>
+                  </div>
+                </>
               )}
             </div>
 
@@ -221,47 +261,60 @@ interface EditTunnelModalProps {
 }
 
 const EditTunnelModal = ({ tunnel, onClose, onSuccess }: EditTunnelModalProps) => {
-  // Extract remote_ip and remote_port from spec (Shifter pattern)
-  // Fallback to parsing forward_to for backward compatibility
-  const remoteIp = tunnel.spec?.remote_ip || (tunnel.spec?.forward_to ? tunnel.spec.forward_to.split(':')[0] : '127.0.0.1')
-  const remotePort = tunnel.spec?.remote_port || (tunnel.spec?.forward_to ? parseInt(tunnel.spec.forward_to.split(':')[1]) || 8080 : 8080)
+  const remoteIp =
+    tunnel.spec?.remote_ip ||
+    (tunnel.spec?.forward_to ? tunnel.spec.forward_to.split(':')[0] : '127.0.0.1')
+  const remotePort =
+    tunnel.spec?.remote_port ||
+    (tunnel.spec?.forward_to ? parseInt(tunnel.spec.forward_to.split(':')[1]) || 8080 : 8080)
   
   const [formData, setFormData] = useState({
     name: tunnel.name,
-    port: tunnel.spec?.listen_port || tunnel.spec?.remote_port || 8080,
+    port: tunnel.spec?.listen_port || tunnel.spec?.remote_port || tunnel.spec?.port || 8080,
     remote_ip: remoteIp,
-    rathole_remote_addr: tunnel.spec?.remote_addr ? (tunnel.spec.remote_addr.includes(':') ? tunnel.spec.remote_addr.split(':')[1] : tunnel.spec.remote_addr) : '',
+    rathole_remote_addr: tunnel.spec?.remote_addr
+      ? (tunnel.spec.remote_addr.includes(':')
+          ? tunnel.spec.remote_addr.split(':')[1]
+          : tunnel.spec.remote_addr)
+      : '',
     rathole_local_port: tunnel.spec?.local_addr ? tunnel.spec.local_addr.split(':')[1] : '',
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      // Build updated spec
       const updatedSpec = { ...tunnel.spec }
       
       if (tunnel.core === 'rathole') {
         if (formData.rathole_remote_addr) {
           const remoteHost = window.location.hostname
-          const remotePort = formData.rathole_remote_addr.includes(':') 
-            ? formData.rathole_remote_addr.split(':')[1] 
-            : formData.rathole_remote_addr
+          const remotePort =
+            formData.rathole_remote_addr.includes(':')
+              ? formData.rathole_remote_addr.split(':')[1]
+              : formData.rathole_remote_addr
           updatedSpec.remote_addr = `${remoteHost}:${remotePort || '23333'}`
         }
         if (formData.rathole_local_port) {
           updatedSpec.local_addr = `127.0.0.1:${formData.rathole_local_port}`
         }
-        // Proxy port (listen_port) is where clients connect to access the tunneled service
-        const port = parseInt(formData.port.toString()) || parseInt(formData.rathole_local_port) || 8090
+        const port =
+          parseInt(formData.port.toString()) ||
+          parseInt(formData.rathole_local_port) ||
+          8090
         updatedSpec.remote_port = port
         updatedSpec.listen_port = port
-      } else if (tunnel.core === 'xray' && (tunnel.type === 'tcp' || tunnel.type === 'udp' || tunnel.type === 'grpc' || tunnel.type === 'tcpmux')) {
+      } else if (
+        tunnel.core === 'xray' &&
+        (tunnel.type === 'tcp' ||
+          tunnel.type === 'udp' ||
+          tunnel.type === 'grpc' ||
+          tunnel.type === 'tcpmux')
+      ) {
         const remoteIp = formData.remote_ip || '127.0.0.1'
         const port = parseInt(formData.port.toString()) || 8080
         updatedSpec.remote_ip = remoteIp
         updatedSpec.remote_port = port
         updatedSpec.listen_port = port
-        // Also set forward_to for backward compatibility
         updatedSpec.forward_to = `${remoteIp}:${port}`
       }
 
@@ -293,46 +346,57 @@ const EditTunnelModal = ({ tunnel, onClose, onSuccess }: EditTunnelModalProps) =
               required
             />
           </div>
-          {tunnel.core === 'xray' && (tunnel.type === 'tcp' || tunnel.type === 'udp' || tunnel.type === 'grpc' || tunnel.type === 'tcpmux') && (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Remote IP
-                </label>
-                <input
-                  type="text"
-                  value={formData.remote_ip}
-                  onChange={(e) =>
-                    setFormData({ ...formData, remote_ip: e.target.value || '127.0.0.1' })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
-                  placeholder="127.0.0.1"
-                />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Target server IP address
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Port
-                </label>
-                <input
-                  type="number"
-                  value={formData.port}
-                  onChange={(e) =>
-                    setFormData({ ...formData, port: parseInt(e.target.value) || 8080 })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
-                  placeholder="8080"
-                  min="1"
-                  max="65535"
-                />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Port (same for panel and target server)
-                </p>
-              </div>
-            </>
-          )}
+
+          {tunnel.core === 'xray' &&
+            (tunnel.type === 'tcp' ||
+              tunnel.type === 'udp' ||
+              tunnel.type === 'grpc' ||
+              tunnel.type === 'tcpmux') && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Remote IP
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.remote_ip}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        remote_ip: e.target.value || '127.0.0.1',
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                    placeholder="127.0.0.1"
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Target server IP address
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Port
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.port}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        port: parseInt(e.target.value) || 8080,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                    placeholder="8080"
+                    min="1"
+                    max="65535"
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Port (same for panel and target server)
+                  </p>
+                </div>
+              </>
+            )}
           
           {tunnel.core === 'rathole' && (
             <div>
@@ -343,7 +407,10 @@ const EditTunnelModal = ({ tunnel, onClose, onSuccess }: EditTunnelModalProps) =
                 type="number"
                 value={formData.port}
                 onChange={(e) =>
-                  setFormData({ ...formData, port: parseInt(e.target.value) || 8080 })
+                  setFormData({
+                    ...formData,
+                    port: parseInt(e.target.value) || 8080,
+                  })
                 }
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
                 min="1"
@@ -363,18 +430,28 @@ const EditTunnelModal = ({ tunnel, onClose, onSuccess }: EditTunnelModalProps) =
                 </label>
                 <input
                   type="number"
-                  value={formData.rathole_remote_addr ? formData.rathole_remote_addr.split(':')[1] || formData.rathole_remote_addr : ''}
+                  value={
+                    formData.rathole_remote_addr
+                      ? formData.rathole_remote_addr.split(':')[1] ||
+                        formData.rathole_remote_addr
+                      : ''
+                  }
                   onChange={(e) => {
                     const port = e.target.value
                     const host = window.location.hostname
-                    setFormData({ ...formData, rathole_remote_addr: port ? `${host}:${port}` : '' })
+                    setFormData({
+                      ...formData,
+                      rathole_remote_addr: port ? `${host}:${port}` : '',
+                    })
                   }}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
                   placeholder="23333"
                   min="1"
                   max="65535"
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Rathole server port on panel (IP: {window.location.hostname})</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Rathole server port on panel (IP: {window.location.hostname})
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -384,7 +461,10 @@ const EditTunnelModal = ({ tunnel, onClose, onSuccess }: EditTunnelModalProps) =
                   type="number"
                   value={formData.rathole_local_port}
                   onChange={(e) =>
-                    setFormData({ ...formData, rathole_local_port: e.target.value })
+                    setFormData({
+                      ...formData,
+                      rathole_local_port: e.target.value,
+                    })
                   }
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
                   placeholder="8080"
@@ -433,6 +513,15 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
     rathole_remote_addr: '23333',
     rathole_token: '',
     rathole_local_port: '8080',
+    // Hysteria2
+    hysteria_password: 'ChangeMe123',
+    hysteria_up: '50 Mbps',
+    hysteria_down: '200 Mbps',
+    // WireGuard
+    wg_cidr: '10.10.0.0/24',
+    wg_peers: 5,
+    wg_dns: '1.1.1.1, 8.8.8.8',
+    wg_allowed_ips: '0.0.0.0/0, ::/0',
     spec: {} as Record<string, any>,
   })
 
@@ -441,36 +530,57 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
     try {
       const spec = getSpecForType(formData.core, formData.type)
       
-      // For GOST tunnels (TCP/UDP/gRPC/TCPMux), set remote_ip and remote_port (Shifter pattern)
-      if (formData.core === 'xray' && (formData.type === 'tcp' || formData.type === 'udp' || formData.type === 'grpc' || formData.type === 'tcpmux')) {
+      if (
+        formData.core === 'xray' &&
+        (formData.type === 'tcp' ||
+          formData.type === 'udp' ||
+          formData.type === 'grpc' ||
+          formData.type === 'tcpmux')
+      ) {
         const remoteIp = formData.remote_ip || '127.0.0.1'
         const port = parseInt(formData.port.toString()) || 8080
         spec.remote_ip = remoteIp
         spec.remote_port = port
         spec.listen_port = port
-        // Also set forward_to for backward compatibility
         spec.forward_to = `${remoteIp}:${port}`
       }
       
-      // For Rathole, add required fields
       if (formData.core === 'rathole') {
-        // Use window.location.hostname for IP, rathole_remote_addr is just the port now
         const remoteHost = window.location.hostname
         const remotePort = formData.rathole_remote_addr || '23333'
         spec.remote_addr = `${remoteHost}:${remotePort}`
         spec.token = formData.rathole_token
         spec.local_addr = `127.0.0.1:${formData.rathole_local_port}`
-        // Proxy port (listen_port) is where clients connect to access the tunneled service
-        const port = parseInt(formData.port.toString()) || parseInt(formData.rathole_local_port) || 8090
+        const port =
+          parseInt(formData.port.toString()) ||
+          parseInt(formData.rathole_local_port) ||
+          8090
         spec.remote_port = port
         spec.listen_port = port
+      }
+
+      if (formData.core === 'hysteria2') {
+        const port = parseInt(formData.port.toString()) || 8448
+        spec.port = port
+        spec.password = formData.hysteria_password || 'ChangeMe123'
+        spec.up = formData.hysteria_up || '50 Mbps'
+        spec.down = formData.hysteria_down || '200 Mbps'
+      }
+
+      if (formData.core === 'wireguard') {
+        const port = parseInt(formData.port.toString()) || 51820
+        spec.port = port
+        spec.cidr = formData.wg_cidr || '10.10.0.0/24'
+        spec.peers = parseInt(formData.wg_peers.toString()) || 5
+        spec.dns = formData.wg_dns
+        spec.allowed_ips = formData.wg_allowed_ips || '0.0.0.0/0, ::/0'
       }
       
       const payload = {
         name: formData.name,
         core: formData.core,
         type: formData.type,
-        node_id: formData.node_id || null,  // null for GOST tunnels (no node needed)
+        node_id: formData.core === 'rathole' ? formData.node_id || null : null,
         spec: spec,
       }
       await api.post('/tunnels', payload)
@@ -482,16 +592,12 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
   }
 
   const getSpecForType = (core: string, type: string): Record<string, any> => {
-    const baseSpec: Record<string, any> = {
-      // listen_port will be set from formData.local_port
-    }
+    const baseSpec: Record<string, any> = {}
 
-    // Rathole is a separate core, not a type
     if (core === 'rathole') {
       return { ...baseSpec, remote_addr: '', token: '', local_addr: '127.0.0.1:8080' }
     }
 
-    // GOST core types
     switch (type) {
       case 'grpc':
         return { ...baseSpec, service_name: 'GrpcService', uuid: generateUUID() }
@@ -502,15 +608,27 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
     }
   }
 
-  // When core changes, update type accordingly
   const handleCoreChange = (core: string) => {
     let newType = formData.type
+    let newPort = formData.port
+
     if (core === 'rathole') {
-      newType = core // Type matches core for rathole
-    } else if (formData.type === 'rathole') {
-      newType = 'tcp' // Reset to default GOST type
+      newType = core
+      newPort = 8090
+    } else if (core === 'hysteria2') {
+      newType = 'server'
+      newPort = 8448
+    } else if (core === 'wireguard') {
+      newType = 'server'
+      newPort = 51820
+    } else {
+      if (newType === 'rathole' || newType === 'server') {
+        newType = 'tcp'
+      }
+      newPort = 8080
     }
-    setFormData({ ...formData, core, type: newType })
+
+    setFormData({ ...formData, core, type: newType, port: newPort })
   }
 
   const generateUUID = () => {
@@ -539,7 +657,7 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
                 required
               />
             </div>
-            {formData.core !== 'xray' && (
+            {formData.core === 'rathole' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Node
@@ -573,6 +691,8 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
               >
                 <option value="xray">GOST</option>
                 <option value="rathole">Rathole</option>
+                <option value="hysteria2">Hysteria2</option>
+                <option value="wireguard">WireGuard</option>
               </select>
             </div>
             <div>
@@ -583,10 +703,18 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
                 value={formData.type}
                 onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
-                disabled={formData.core === 'rathole'}
+                disabled={
+                  formData.core === 'rathole' ||
+                  formData.core === 'hysteria2' ||
+                  formData.core === 'wireguard'
+                }
               >
                 {formData.core === 'rathole' ? (
-                  <option value={formData.core}>{formData.core.charAt(0).toUpperCase() + formData.core.slice(1)}</option>
+                  <option value={formData.core}>
+                    {formData.core.charAt(0).toUpperCase() + formData.core.slice(1)}
+                  </option>
+                ) : formData.core === 'hysteria2' || formData.core === 'wireguard' ? (
+                  <option value={formData.type}>Server</option>
                 ) : (
                   <>
                     <option value="tcp">TCP</option>
@@ -599,48 +727,60 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
             </div>
           </div>
 
-          {formData.core === 'xray' && (formData.type === 'tcp' || formData.type === 'udp' || formData.type === 'grpc' || formData.type === 'tcpmux') && (
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Remote IP
-                </label>
-                <input
-                  type="text"
-                  value={formData.remote_ip}
-                  onChange={(e) =>
-                    setFormData({ ...formData, remote_ip: e.target.value || '127.0.0.1' })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
-                  placeholder="127.0.0.1"
-                />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Target server IP address
-                </p>
+          {/* GOST/Xray fields */}
+          {formData.core === 'xray' &&
+            (formData.type === 'tcp' ||
+              formData.type === 'udp' ||
+              formData.type === 'grpc' ||
+              formData.type === 'tcpmux') && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Remote IP
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.remote_ip}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        remote_ip: e.target.value || '127.0.0.1',
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                    placeholder="127.0.0.1"
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Target server IP address
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Port
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.port}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        port: parseInt(e.target.value) || 8080,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                    placeholder="8080"
+                    min="1"
+                    max="65535"
+                    required
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Port (same for panel and target server)
+                  </p>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Port
-                </label>
-                <input
-                  type="number"
-                  value={formData.port}
-                  onChange={(e) =>
-                    setFormData({ ...formData, port: parseInt(e.target.value) || 8080 })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
-                  placeholder="8080"
-                  min="1"
-                  max="65535"
-                  required
-                />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Port (same for panel and target server)
-                </p>
-              </div>
-            </div>
-          )}
-          
+            )}
+
+          {/* Rathole fields */}
           {formData.core === 'rathole' && (
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -651,7 +791,10 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
                   type="number"
                   value={formData.port}
                   onChange={(e) =>
-                    setFormData({ ...formData, port: parseInt(e.target.value) || 8080 })
+                    setFormData({
+                      ...formData,
+                      port: parseInt(e.target.value) || 8080,
+                    })
                   }
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
                   min="1"
@@ -670,7 +813,10 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
                   type="number"
                   value={formData.rathole_remote_addr}
                   onChange={(e) =>
-                    setFormData({ ...formData, rathole_remote_addr: e.target.value })
+                    setFormData({
+                      ...formData,
+                      rathole_remote_addr: e.target.value,
+                    })
                   }
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
                   placeholder="23333"
@@ -678,11 +824,13 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
                   max="65535"
                   required
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Rathole server port on panel (IP: {window.location.hostname})</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Rathole server port on panel (IP: {window.location.hostname})
+                </p>
               </div>
             </div>
           )}
-          
+
           {formData.core === 'rathole' && (
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -693,13 +841,18 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
                   type="text"
                   value={formData.rathole_token}
                   onChange={(e) =>
-                    setFormData({ ...formData, rathole_token: e.target.value })
+                    setFormData({
+                      ...formData,
+                      rathole_token: e.target.value,
+                    })
                   }
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
                   placeholder="your-token"
                   required
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Authentication token</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Authentication token
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -709,7 +862,10 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
                   type="number"
                   value={formData.rathole_local_port}
                   onChange={(e) =>
-                    setFormData({ ...formData, rathole_local_port: e.target.value })
+                    setFormData({
+                      ...formData,
+                      rathole_local_port: e.target.value,
+                    })
                   }
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
                   placeholder="8080"
@@ -717,7 +873,186 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
                   max="65535"
                   required
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Local service port (127.0.0.1:{formData.rathole_local_port || '8080'})</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Local service port (127.0.0.1:{formData.rathole_local_port || '8080'})
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Hysteria2 fields */}
+          {formData.core === 'hysteria2' && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Port
+                </label>
+                <input
+                  type="number"
+                  value={formData.port}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      port: parseInt(e.target.value) || 8448,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                  placeholder="8448"
+                  min="1"
+                  max="65535"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Password
+                </label>
+                <input
+                  type="text"
+                  value={formData.hysteria_password}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      hysteria_password: e.target.value,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white font-mono"
+                  placeholder="ChangeMe123"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Down
+                </label>
+                <input
+                  type="text"
+                  value={formData.hysteria_down}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      hysteria_down: e.target.value,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                  placeholder="200 Mbps"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Up
+                </label>
+                <input
+                  type="text"
+                  value={formData.hysteria_up}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      hysteria_up: e.target.value,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                  placeholder="50 Mbps"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* WireGuard fields */}
+          {formData.core === 'wireguard' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Port
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.port}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        port: parseInt(e.target.value) || 51820,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                    placeholder="51820"
+                    min="1"
+                    max="65535"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    CIDR داخلی
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.wg_cidr}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        wg_cidr: e.target.value,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                    placeholder="10.10.0.0/24"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    تعداد Peers
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.wg_peers}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        wg_peers: parseInt(e.target.value) || 1,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                    min="1"
+                    max="256"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    DNS
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.wg_dns}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        wg_dns: e.target.value,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                    placeholder="1.1.1.1, 8.8.8.8"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Allowed IPs
+                </label>
+                <input
+                  type="text"
+                  value={formData.wg_allowed_ips}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      wg_allowed_ips: e.target.value,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                  placeholder="0.0.0.0/0, ::/0"
+                />
               </div>
             </div>
           )}
@@ -744,4 +1079,3 @@ const AddTunnelModal = ({ nodes, onClose, onSuccess }: AddTunnelModalProps) => {
 }
 
 export default Tunnels
-
